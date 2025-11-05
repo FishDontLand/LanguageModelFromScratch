@@ -7,16 +7,8 @@ from cs336_basics.pretokenization_example import find_chunk_boundaries
 from heapq import heappush, heappop, heapify
 import pickle
 
-class Node:
-    """
-    helper class for linked list
-    """
-    def __init__(self):
-        self.val = None
-        self.next = None
-        self.prev = None
+from cs336_basics.tokenizer_utils import PAT, Node, create_linked_lst
 
-PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
 class MergeCountMap:
     """
@@ -178,8 +170,6 @@ def bytes_merge_core(batch_pre_token_count_lst, special_tokens, vocab_size):
                 search_map[sub_word] = set()
             search_map[sub_word].add(word)
 
-        head = None
-        current = None
         for i in range(len(word_bytes)):
             if i < len(word_bytes) - 1:
                 merge = tuple([word_bytes[i:i + 1], word_bytes[i + 1:i + 2]])
@@ -187,17 +177,7 @@ def bytes_merge_core(batch_pre_token_count_lst, special_tokens, vocab_size):
                     merge_count_dict[merge] = 0
                 merge_count_dict[merge] += count
 
-            node = Node()
-            node.val = word_bytes[i:(i + 1)]
-            if head is None:
-                head = node
-                current = head
-            else:
-                current.next = node
-                node.prev = current
-                current = node
-
-        pre_token_linked_lst[word] = head
+        pre_token_linked_lst[word] = create_linked_lst(word_bytes)
     print(datetime.datetime.now(), 'pretoknization merge finished')
     merge_count_map = MergeCountMap(merge_count_dict)
     next_id = 0
