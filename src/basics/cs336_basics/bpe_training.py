@@ -53,7 +53,7 @@ class MergeCountMap:
 
         return pop.bytes_pair
 
-def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
+def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]|None) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     """
     train BPE tokenizer
 
@@ -67,9 +67,8 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]) -> tu
         merges: A list of BPE merges produced from training.
 
     """
-
-    split_pattern = '|'.join(special_tokens)
-    batch_pre_token_count_lst = pre_tokenizaiton_core(split_pattern, input_path)
+    special_tokens = None if special_tokens is None else sorted(special_tokens, key=lambda x: len(x), reverse=True)
+    batch_pre_token_count_lst = pre_tokenizaiton_core(special_tokens, input_path)
     print(datetime.datetime.now(), 'batch tokenization finished')
     return bytes_merge_core(batch_pre_token_count_lst, special_tokens, vocab_size)
 
@@ -86,18 +85,22 @@ def get_batch_pre_tokenization_count(split_pattern, chunk: str):
 
     return pre_tokenization_count
 
-def pre_tokenizaiton_core(split_pattern, input_path):
+def pre_tokenizaiton_core(special_tokens, input_path):
+    slit_pattern = '|'.join([re.escape(tk) for tk in special_tokens])
     batch_pre_token_count_lst = list()
     num_processes = min(os.cpu_count(), 10)
     with open(input_path, "rb") as file:
-        boundaries = find_chunk_boundaries(file, num_processes, b'<|endoftext|>')
+        if '<|endoftext|>' in special_tokens:
+            boundaries = find_chunk_boundaries(file, num_processes, b'<|endoftext|>')
+        else:
+            boundaries = find_chunk_boundaries(file, num_processes, special_tokens[0].encode('utf-8'))
         pool = Pool(len(boundaries) - 1)
 
         for start, end in zip(boundaries[:-1], boundaries[1:]):
             file.seek(start)
-            chunk = file.read(end - start).decode("utf-8", errors="ignore").replace('\r\n', '\n')
+            chunk = file.read(end - start).decode("utf-8", errors="ignore")
             pool.apply_async(get_batch_pre_tokenization_count,
-                             args=(split_pattern, chunk), callback=lambda r: batch_pre_token_count_lst.append(r))
+                             args=(slit_pattern, chunk), callback=lambda r: batch_pre_token_count_lst.append(r))
 
     pool.close()
     pool.join()
@@ -214,7 +217,7 @@ if __name__ == '__main__':
     profiler = cProfile.Profile()
     profiler.enable()
     print(datetime.datetime.now(), 'program started')
-    vocab, merges = train_bpe(data_file, 10000, [r"<\|endoftext\|>"])
+    vocab, merges = train_bpe(data_file, 10000, ["<|endoftext|>"])
     profiler.disable()
     profiler.print_stats()
 

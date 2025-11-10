@@ -4,6 +4,7 @@ from typing import Iterable, Iterator
 
 import regex as re
 
+from cs336_basics.bpe_training import pre_tokenizaiton_core
 from cs336_basics.tokenizer_utils import create_linked_lst, PAT
 
 
@@ -19,8 +20,8 @@ class Tokenizer:
         self.vocab = vocab
         self.rev_vocab_map = {v: k for k, v in vocab.items()}
         self.merges = {k: v for v, k in enumerate(merges)}
-        self.special_tokens = special_tokens
-        self.special_token_pattern = '|'.join(self.special_tokens)
+        special_tokens = None if special_tokens is None else sorted(special_tokens, key=lambda x : len(x), reverse=True)
+        self.special_token_pattern = None if special_tokens is None or len(special_tokens) == 0 else '|'.join([re.escape(tk) for tk in special_tokens])
 
     def from_files(cls, vocab_filepath: str, merges_filepath: str, special_tokens: list[str]|None=None):
         vocab = pickle.load(open(vocab_filepath, "rb"))
@@ -65,12 +66,60 @@ class Tokenizer:
 
 
     def encode(self, text: str) -> list[int]:
-        chunk_lst = re.split(self.special_token_pattern, text)
         output = []
-        for chunk in chunk_lst:
-            for match in re.finditer(PAT, chunk):
-                encoded_match = self.token_encode(match.group(0))
-                output += encoded_match
+        """
+        an implementation without needing to store the split text
+        """
+        # if self.special_token_pattern is not None:
+        #     special_token_pattern = re.compile(self.special_token_pattern).pattern
+        #     pre_token_pattern = re.compile(PAT).pattern
+        #     end_pattern = f'({pre_token_pattern})({special_token_pattern})'
+        #     full_pattern =  f'({end_pattern})|({special_token_pattern})|({pre_token_pattern})'
+        #     for match in re.finditer(full_pattern, text):
+        #         if re.fullmatch(special_token_pattern, match.group(0)) is not None:
+        #             output.append(self.rev_vocab_map[match.group(0).encode('utf-8')])
+        #         elif re.fullmatch(pre_token_pattern, match.group(0)) is not None:
+        #             encoded_token = self.token_encode(match.group(0))
+        #             for n in encoded_token:
+        #                 output.append(n)
+        #         else:
+        #             match = re.fullmatch(end_pattern, match.group(0))
+        #             encoded_token = self.token_encode(match.group(1))
+        #             for n in encoded_token:
+        #                 output.append(n)
+        #             output.append(self.rev_vocab_map[match.group(2).encode('utf-8')])
+        #
+        # else:
+        #     for match in re.finditer(PAT, text):
+        #         encoded_token = self.token_encode(match.group(0))
+        #         for n in encoded_token:
+        #             output.append(n)
+        #
+        # return output
+        """
+        naive implementation of encoding step
+        """
+        chunk_start = 0
+        if self.special_token_pattern is not None:
+            for special_token_match in re.finditer(self.special_token_pattern, text):
+                special_token_span = special_token_match.span()
+                chunk_end = special_token_span[0]
+                if chunk_start < chunk_end:
+                    chunk = text[chunk_start:chunk_end]
+                    for pre_token_match in re.finditer(PAT, chunk):
+                        encoded_text = self.token_encode(pre_token_match.group(0))
+                        for n in encoded_text:
+                            output.append(n)
+
+                output.append(self.rev_vocab_map[special_token_match.group(0).encode('utf-8')])
+                chunk_start = special_token_span[1]
+
+        if chunk_start < len(text):
+            chunk = text[chunk_start:]
+            for pre_token_match in re.finditer(PAT, chunk):
+                encoded_match = self.token_encode(pre_token_match.group(0))
+                for n in encoded_match:
+                    output.append(n)
         return output
 
 
