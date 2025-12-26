@@ -16,7 +16,7 @@ def train_model(train_data_path: str, valid_data_path: str, batch_size: int, dev
                 checkpoint_path: str|os.PathLike, log_freq: int,
                 num_epochs: int, vocab_size: int, d_model: int, num_layers: int, num_heads: int, d_ff: int,
                 context_length: int, theta: float,
-                lr: float, betas: tuple, weight_decay: float
+                lr: float, betas: tuple, weight_decay: float, run: wandb.Run
 ):
     train_data = np.load(train_data_path, mmap_mode='r')
     tqdm.write("training data loaded")
@@ -34,10 +34,9 @@ def train_model(train_data_path: str, valid_data_path: str, batch_size: int, dev
         loss.backward()
         optimizer.step()
         save_checkpoint(lm, optimizer, epoch, checkpoint_path)
+        loss_info = {"train_loss": loss.detach().cpu().item()}
+        run.log(loss_info)
         if epoch % log_freq ==  log_freq - 1:
-            tqdm.write("")
-            tqdm.write(f"training results after at epoch {epoch}")
-            tqdm.write(f"train loss: {loss.detach().cpu().item()}")
             with torch.no_grad():
                 avg_valid_loss = 0
                 num_valid_batches = 0
@@ -59,7 +58,8 @@ def train_model(train_data_path: str, valid_data_path: str, batch_size: int, dev
                     ratio = current_batch_size / batch_size
                     avg_valid_loss = avg_valid_loss * num_valid_batches / (num_valid_batches + ratio) + valid_loss * ratio / (num_valid_batches + ratio)
                     num_valid_batches += ratio
-                tqdm.write(f'valid loss: {avg_valid_loss.detach().cpu().item()}')
+                run.log({"valid_loss": avg_valid_loss.detach().cpu().item()})
+
 
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
@@ -84,23 +84,36 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    # run = wandb.init(
-    #     # Set the wandb entity where your project will be logged (generally your team name).
-    #     entity="my-awesome-team-name",
-    #     # Set the wandb project where this run will be logged.
-    #     project="train_name",
-    #     # Track hyperparameters and run metadata.
-    #     config={
-    #         "learning_rate": args.lr,
-    #         "architecture": "TransformerLM",
-    #         "dataset": "args.train_path",
-    #         "epochs": 10,
-    #     },
-    # )
-    #
+    run = wandb.init(
+        # Set the wandb entity where your project will be logged (generally your team name).
+        entity="dyu68-georgia-institute-of-technology",
+        # Set the wandb project where this run will be logged.
+        project="TrainLM",
+        # Track hyperparameters and run metadata.
+        config={
+            "learning_rate": args.lr,
+            "architecture": "TransformerLM",
+            "dataset": args.train_path,
+            "batch_size": args.batch_size,
+            "num_epochs": args.num_epochs,
+            "vocab_size": args.vocab_size,
+            "d_model": args.d_model,
+            "num_layers": args.num_layers,
+            "num_heads": args.num_heads,
+            "d_ff": args.d_ff,
+            "context_length": args.context_length,
+            "theta": args.theta,
+            "weight_decay": args.weight_decay,
+            "beta1": args.beta1,
+            "beta2": args.beta2
+        },
+    )
+
 
     train_model(args.train_path, args.valid_path, args.batch_size, args.device,
                 args.checkpoint_path, args.log_freq,
                 args.num_epochs, args.vocab_size, args.d_model, args.num_layers, args.num_heads, args.d_ff,
-                args.context_length, args.theta, args.lr, (args.beta1, args.beta2), args.weight_decay)
+                args.context_length, args.theta, args.lr, (args.beta1, args.beta2), args.weight_decay, run)
+
+    run.finish()
 
