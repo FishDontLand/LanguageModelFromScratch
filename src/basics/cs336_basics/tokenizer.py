@@ -4,7 +4,6 @@ from typing import Iterable, Iterator
 
 import regex as re
 
-from cs336_basics.bpe_training import pre_tokenizaiton_core
 from cs336_basics.utils import PAT, create_linked_lst
 
 

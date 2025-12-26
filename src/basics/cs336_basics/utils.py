@@ -6,10 +6,6 @@ import einx
 import torch
 import numpy as np
 
-from cs336_basics.module import TransformerLM
-from cs336_basics.tokenizer import Tokenizer
-
-
 class Node:
     """
     helper class for linked list
@@ -85,7 +81,7 @@ def gradient_clipping(param_lst: list[torch.Tensor], max_l2: float, eps: float =
         if p.grad is None:
             continue
         p_norm = p.grad.norm()
-        total_norm_square += (p_norm * p_norm).detach.numpy()
+        total_norm_square += (p_norm * p_norm).detach()
 
     total_norm = torch.sqrt(total_norm_square)
     if total_norm > max_l2:
@@ -98,8 +94,8 @@ def gradient_clipping(param_lst: list[torch.Tensor], max_l2: float, eps: float =
 def data_loading(x: np.ndarray, batch_size: int, context_length: int, device: str) -> tuple[torch.Tensor, torch.Tensor]:
     if batch_size > len(x) - context_length:
         raise ValueError(f"batch_size should be less than {len(x) - context_length}")
-    possible_starts = range(len(x) - context_length)
-    samples_starts = np.random.choice(possible_starts, (batch_size, 1))
+    rng = np.random.default_rng()
+    samples_starts = rng.integers(0, len(x) - context_length, size=(batch_size , 1))
     input_locs = samples_starts + np.arange(context_length)
     target_locs = input_locs + 1
     inputs = torch.tensor(x[input_locs], device=device, dtype=torch.long)
@@ -122,22 +118,6 @@ def load_checkpoint(src: str|os.PathLike|typing.BinaryIO|typing.IO[bytes], model
     optimizer.load_state_dict(states['optimizer'])
     return states['iteration']
 
-@torch.no_grad()
-def decode(prompt: torch.Tensor, model: TransformerLM, max_tokens: int, temperature: float,  p: float, tokenizer: Tokenizer):
-    output = []
-    for _ in range(max_tokens):
-        logits = model.forward(prompt)
-        prob = softmax(logits / temperature, i=-1)
-        prob = prob.select(dim=-2, index=-1)
-        prob_sorted, idx = torch.sort(prob, descending=True, dim=-1)
-        cum_prob = torch.cumsum(prob_sorted, dim=-1)
-        prob_sorted[cum_prob > p] = 0.0
-        sample_idx = torch.multinomial(prob_sorted, num_samples=1)
-        next_word_idx = idx.gather(dim=-1, index=sample_idx).detach().cpu().item()
-        output.append(next_word_idx)
-        if next_word_idx == tokenizer.rev_vocab_map['<|endoftext|>'.encode('utf-8')]:
-            break
-    return torch.tensor(output, dtype=torch.long, device=prompt.device)
 
 
 

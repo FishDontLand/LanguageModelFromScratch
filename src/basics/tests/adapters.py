@@ -165,7 +165,7 @@ def run_multihead_self_attention(
         'q_proj.weight': q_proj_weight,
         'k_proj.weight': k_proj_weight,
         'v_proj.weight': v_proj_weight,
-        'o_proj.weight': o_proj_weight
+        'output_proj.weight': o_proj_weight
     }
     self_attention.load_state_dict(state_dict)
     return self_attention.forward(in_features)

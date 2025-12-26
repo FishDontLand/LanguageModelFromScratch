@@ -3,6 +3,7 @@ import os
 import numpy as np
 import torch
 import argparse
+import wandb
 
 from tqdm import tqdm
 
@@ -18,14 +19,14 @@ def train_model(train_data_path: str, valid_data_path: str, batch_size: int, dev
                 lr: float, betas: tuple, weight_decay: float
 ):
     train_data = np.load(train_data_path, mmap_mode='r')
-    print("training data loaded")
+    tqdm.write("training data loaded")
     valid_data = np.load(valid_data_path, mmap_mode='r')
-    print("validation data loaded")
+    tqdm.write("validation data loaded")
     lm = TransformerLM(vocab_size, d_model, num_layers, num_heads, d_ff, context_length, theta,
                        dtype=torch.float, device=torch.device(device))
     optimizer = AdamW(lm.parameters(), lr, betas, weight_decay)
-    print("model and optimizer initialized")
-    for epoch in tqdm(range(num_epochs)):
+    tqdm.write("model and optimizer initialized")
+    for epoch in tqdm(range(num_epochs), desc="training epoch", position=0):
         batch_inputs, batch_targets = data_loading(train_data, batch_size, context_length, device)
         optimizer.zero_grad()
         model_outputs = lm(batch_inputs)
@@ -34,27 +35,31 @@ def train_model(train_data_path: str, valid_data_path: str, batch_size: int, dev
         optimizer.step()
         save_checkpoint(lm, optimizer, epoch, checkpoint_path)
         if epoch % log_freq ==  log_freq - 1:
-            print(f"training results after at epoch {epoch}")
-            print(f"train loss: {loss.detach().cpu().item()}")
+            tqdm.write("")
+            tqdm.write(f"training results after at epoch {epoch}")
+            tqdm.write(f"train loss: {loss.detach().cpu().item()}")
             with torch.no_grad():
                 avg_valid_loss = 0
                 num_valid_batches = 0
-                i = 0
-                upper_bound = len(valid_data) - context_length
-                while i < upper_bound:
-                    range_stop = min(upper_bound, i + batch_size)
-                    num_points = range_stop - i
-                    input_locs = np.arange(i,range_stop).reshape(-1, 1) + np.arange(context_length)
+                batch_idx = 0
+                num_batches = len(valid_data) // context_length
+                num_iters = num_batches // batch_size
+                if num_iters * batch_size < num_batches:
+                    num_iters += 1
+                for i in range(num_iters):
+                    batch_start_idx = i * batch_size
+                    batch_end_idx = min((i + 1) * batch_size, num_batches)
+                    current_batch_size = batch_end_idx - batch_idx
+                    input_locs = np.arange(batch_start_idx * context_length, batch_end_idx * context_length, context_length).reshape(-1, 1) + np.arange(context_length)
                     target_locs = input_locs + 1
                     valid_inputs = torch.tensor(valid_data[input_locs], device=device, dtype=torch.long)
                     valid_targets = torch.tensor(valid_data[target_locs], device=device, dtype=torch.long)
-                    i = range_stop
                     valid_outputs = lm(valid_inputs)
                     valid_loss = cross_entropy(valid_outputs, valid_targets)
-                    ratio = num_points / batch_size
+                    ratio = current_batch_size / batch_size
                     avg_valid_loss = avg_valid_loss * num_valid_batches / (num_valid_batches + ratio) + valid_loss * ratio / (num_valid_batches + ratio)
                     num_valid_batches += ratio
-                print(f'valid loss: {avg_valid_loss.detach().cpu().item()}')
+                tqdm.write(f'valid loss: {avg_valid_loss.detach().cpu().item()}')
 
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
@@ -78,6 +83,22 @@ if __name__ == '__main__':
     parser.add_argument("--weight_decay", help="weight decay of AdamW", type=float)
 
     args = parser.parse_args()
+
+    # run = wandb.init(
+    #     # Set the wandb entity where your project will be logged (generally your team name).
+    #     entity="my-awesome-team-name",
+    #     # Set the wandb project where this run will be logged.
+    #     project="train_name",
+    #     # Track hyperparameters and run metadata.
+    #     config={
+    #         "learning_rate": args.lr,
+    #         "architecture": "TransformerLM",
+    #         "dataset": "args.train_path",
+    #         "epochs": 10,
+    #     },
+    # )
+    #
+
     train_model(args.train_path, args.valid_path, args.batch_size, args.device,
                 args.checkpoint_path, args.log_freq,
                 args.num_epochs, args.vocab_size, args.d_model, args.num_layers, args.num_heads, args.d_ff,
