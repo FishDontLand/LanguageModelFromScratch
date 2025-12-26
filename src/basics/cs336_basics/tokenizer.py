@@ -5,7 +5,7 @@ from typing import Iterable, Iterator
 import regex as re
 
 from cs336_basics.bpe_training import pre_tokenizaiton_core
-from cs336_basics.tokenizer_utils import create_linked_lst, PAT
+from cs336_basics.utils import PAT, create_linked_lst
 
 
 class Tokenizer:
@@ -23,6 +23,7 @@ class Tokenizer:
         special_tokens = None if special_tokens is None else sorted(special_tokens, key=lambda x : len(x), reverse=True)
         self.special_token_pattern = None if special_tokens is None or len(special_tokens) == 0 else '|'.join([re.escape(tk) for tk in special_tokens])
 
+    @classmethod
     def from_files(cls, vocab_filepath: str, merges_filepath: str, special_tokens: list[str]|None=None):
         vocab = pickle.load(open(vocab_filepath, "rb"))
         merges = pickle.load(open(merges_filepath, "rb"))

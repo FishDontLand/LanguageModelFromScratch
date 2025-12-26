@@ -7,7 +7,7 @@ from cs336_basics.pretokenization_example import find_chunk_boundaries
 from heapq import heappush, heappop, heapify
 import pickle
 
-from cs336_basics.tokenizer_utils import PAT, Node, create_linked_lst
+from cs336_basics.utils import Node, PAT, create_linked_lst
 
 
 class MergeCountMap:
@@ -210,9 +210,9 @@ def bytes_merge_core(batch_pre_token_count_lst, special_tokens, vocab_size):
 if __name__ == '__main__':
     # data_name = 'owt_train'
     data_name = 'TinyStoriesV2-GPT4-train'
-    data_path = r'C:\Users\dongz\Documents\CS336\assignment1-basics\data'
+    data_path = r'../data'
 
-    data_file = r'{}\{}.txt'.format(data_path, data_name)
+    data_file = r'{}/{}.txt'.format(data_path, data_name)
     import cProfile
     profiler = cProfile.Profile()
     profiler.enable()
@@ -221,6 +221,10 @@ if __name__ == '__main__':
     profiler.disable()
     profiler.print_stats()
 
-    output_file = r'{}\{}.pkl'.format(data_path, data_name)
-    with open(output_file, 'wb') as f:
-        pickle.dump({'vocab': vocab, 'merges': merges}, f)
+    output_vocab_file = r'{}/{}_vocab.pkl'.format(data_path, data_name)
+    with open(output_vocab_file, 'wb') as f:
+        pickle.dump(vocab, f)
+
+    output_merges_file = r'{}/{}_merges.pkl'.format(data_path, data_name)
+    with open(output_merges_file, 'wb') as f:
+        pickle.dump(merges, f)
