@@ -104,6 +104,20 @@ if __name__ == '__main__':
     parser.add_argument("--weight_decay", help="weight decay of AdamW", type=float)
 
     args = parser.parse_args()
+    model_hyper_params = {
+        "vocab_size": args.vocab_size,
+        "d_model": args.d_model,
+        "num_layers": args.num_layers,
+        "num_heads": args.num_heads,
+        "d_ff": args.d_ff,
+        "context_length": args.context_length,
+        "theta": args.theta,
+    }
+    optimizer_hyper_params = {
+        "lr": args.alpha_min,
+        "betas": (args.beta1, args.beta2),
+        "weight_decay": args.weight_decay,
+    }
     run = wandb.init(
         # Set the wandb entity where your project will be logged (generally your team name).
         entity="dyu68-georgia-institute-of-technology",
@@ -112,30 +126,26 @@ if __name__ == '__main__':
         # Track hyperparameters and run metadata.
         config={
             "architecture": "TransformerLM",
+            "device": args.device,
             "dataset": args.train_path,
+            "checkpoint": args.checkpoint_path,
             "batch_size": args.batch_size,
             "num_epochs": args.num_epochs,
-            "vocab_size": args.vocab_size,
-            "d_model": args.d_model,
-            "num_layers": args.num_layers,
-            "num_heads": args.num_heads,
-            "d_ff": args.d_ff,
-            "context_length": args.context_length,
-            "theta": args.theta,
             "alpha_max": args.alpha_max,
             "alpha_min": args.alpha_min,
             "T_warm": args.T_warm,
             "T_cos": args.T_cos,
             "clipped_norm": args.clipped_norm,
-            "weight_decay": args.weight_decay,
-            "beta1": args.beta1,
-            "beta2": args.beta2
+            "model": model_hyper_params,
+            "optimizer": optimizer_hyper_params,
         },
     )
-
+    checkpoint_file_name = f'checkpoint_{run.id}.pt'
+    run.config.update({'checkpoint_file': checkpoint_file_name})
 
     train_model(train_data_path=args.train_path, valid_data_path=args.valid_path, device=args.device,
-                checkpoint_path=args.checkpoint_path, log_freq=args.log_freq, batch_size=args.batch_size,
+                checkpoint_path=os.path.join(args.checkpoint_path, checkpoint_file_name),
+                log_freq=args.log_freq, batch_size=args.batch_size,
                 num_epochs=args.num_epochs, vocab_size=args.vocab_size, d_model=args.d_model, num_layers=args.num_layers,
                 num_heads=args.num_heads, d_ff=args.d_ff, context_length=args.context_length, theta=args.theta,
                 alpha_max=args.alpha_max, alpha_min=args.alpha_min, T_warm=args.T_warm, T_cos=args.T_cos,
