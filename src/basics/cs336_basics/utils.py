@@ -83,13 +83,15 @@ def gradient_clipping(param_lst: list[torch.Tensor], max_l2: float, eps: float =
         p_norm = p.grad.norm()
         total_norm_square += (p_norm * p_norm).detach()
 
-    total_norm = torch.sqrt(total_norm_square)
+    total_norm = math.sqrt(total_norm_square.cpu().item())
     if total_norm > max_l2:
         scaler = max_l2 / (total_norm + eps)
         for p in param_lst:
             if p.grad is None:
                 continue
             p.grad *= scaler
+
+    return max_l2 if total_norm > max_l2 else total_norm
 
 def data_loading(x: np.ndarray, batch_size: int, context_length: int, device: str) -> tuple[torch.Tensor, torch.Tensor]:
     if batch_size > len(x) - context_length:
@@ -101,7 +103,6 @@ def data_loading(x: np.ndarray, batch_size: int, context_length: int, device: st
     inputs = torch.tensor(x[input_locs], device=device, dtype=torch.long)
     targets = torch.tensor(x[target_locs], device=device, dtype=torch.long)
     return inputs, targets
-
 
 
 def save_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer, iteration: int, out: str|os.PathLike|typing.BinaryIO|typing.IO[bytes]):

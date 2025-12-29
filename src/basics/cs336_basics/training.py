@@ -1,3 +1,4 @@
+import math
 import os
 
 import numpy as np
@@ -9,14 +10,14 @@ from tqdm import tqdm
 
 from cs336_basics.module import TransformerLM
 from cs336_basics.optimizer import AdamW
-from cs336_basics.utils import data_loading, cross_entropy, save_checkpoint
+from cs336_basics.utils import data_loading, cross_entropy, save_checkpoint, learning_rate_schedule, gradient_clipping
 
 
 def train_model(train_data_path: str, valid_data_path: str, batch_size: int, device: str,
                 checkpoint_path: str|os.PathLike, log_freq: int,
                 num_epochs: int, vocab_size: int, d_model: int, num_layers: int, num_heads: int, d_ff: int,
-                context_length: int, theta: float,
-                lr: float, betas: tuple, weight_decay: float, run: wandb.Run
+                context_length: int, theta: float, alpha_max: float, alpha_min: float, T_warm: int, T_cos: int,
+                clipped_norm: float, betas: tuple, weight_decay: float, run: wandb.Run
 ):
     train_data = np.load(train_data_path, mmap_mode='r')
     tqdm.write("training data loaded")
@@ -24,19 +25,35 @@ def train_model(train_data_path: str, valid_data_path: str, batch_size: int, dev
     tqdm.write("validation data loaded")
     lm = TransformerLM(vocab_size, d_model, num_layers, num_heads, d_ff, context_length, theta,
                        dtype=torch.float, device=torch.device(device))
-    optimizer = AdamW(lm.parameters(), lr, betas, weight_decay)
+    optimizer = AdamW(lm.parameters(), 0.001, betas, weight_decay)
     tqdm.write("model and optimizer initialized")
+
     for epoch in tqdm(range(num_epochs), desc="training epoch", position=0):
         batch_inputs, batch_targets = data_loading(train_data, batch_size, context_length, device)
         optimizer.zero_grad()
         model_outputs = lm(batch_inputs)
         loss = cross_entropy(model_outputs, batch_targets)
         loss.backward()
+        scheduled_alpha = learning_rate_schedule(epoch + 1, alpha_max, alpha_min, T_warm, T_cos)
+        model_info = dict()
+        for idx, group in enumerate(optimizer.param_groups):
+            grad_norm = gradient_clipping(group['params'], clipped_norm)
+            data_norm_square = 0
+            for p in group['params']:
+                if p.grad is None:
+                    continue
+                p_norm = p.data.norm()
+                data_norm_square += (p_norm * p_norm).detach()
+            data_norm = math.sqrt(data_norm_square.cpu().item())
+            model_info[f'weights_norm_{idx}'] = data_norm
+            model_info[f'grad_norm_{idx}'] = grad_norm
+            group['alpha'] = scheduled_alpha
         optimizer.step()
-        save_checkpoint(lm, optimizer, epoch, checkpoint_path)
-        loss_info = {"train_loss": loss.detach().cpu().item()}
-        run.log(loss_info)
+        train_info = {"train_loss": loss.detach().cpu().item(),
+                     "alpha": scheduled_alpha}
+        run.log({**train_info, **model_info})
         if epoch % log_freq ==  log_freq - 1:
+            save_checkpoint(lm, optimizer, epoch, checkpoint_path)
             with torch.no_grad():
                 avg_valid_loss = 0
                 num_valid_batches = 0
@@ -77,13 +94,16 @@ if __name__ == '__main__':
     parser.add_argument("--num_heads", help="number of attention heads", type=int)
     parser.add_argument("--context_length", help="length of sentence", type=int)
     parser.add_argument("--theta", help="theta or RoPE", type=float)
-    parser.add_argument("--lr", help="learning rate", type=float)
+    parser.add_argument("--alpha_max", help="max learning rate", type=float)
+    parser.add_argument("--alpha_min", help="min learning rate", type=float)
+    parser.add_argument("--T_warm", help="warmup period", type=float)
+    parser.add_argument("--T_cos", help="cosine period", type=float)
+    parser.add_argument("--clipped_norm", help="max norm to clip", type=float)
     parser.add_argument("--beta1", help="beta1 of AdamW", type=float)
     parser.add_argument("--beta2", help="beta2 of AdamW2", type=float)
     parser.add_argument("--weight_decay", help="weight decay of AdamW", type=float)
 
     args = parser.parse_args()
-
     run = wandb.init(
         # Set the wandb entity where your project will be logged (generally your team name).
         entity="dyu68-georgia-institute-of-technology",
@@ -91,7 +111,6 @@ if __name__ == '__main__':
         project="TrainLM",
         # Track hyperparameters and run metadata.
         config={
-            "learning_rate": args.lr,
             "architecture": "TransformerLM",
             "dataset": args.train_path,
             "batch_size": args.batch_size,
@@ -103,6 +122,11 @@ if __name__ == '__main__':
             "d_ff": args.d_ff,
             "context_length": args.context_length,
             "theta": args.theta,
+            "alpha_max": args.alpha_max,
+            "alpha_min": args.alpha_min,
+            "T_warm": args.T_warm,
+            "T_cos": args.T_cos,
+            "clipped_norm": args.clipped_norm,
             "weight_decay": args.weight_decay,
             "beta1": args.beta1,
             "beta2": args.beta2
@@ -110,10 +134,12 @@ if __name__ == '__main__':
     )
 
 
-    train_model(args.train_path, args.valid_path, args.batch_size, args.device,
-                args.checkpoint_path, args.log_freq,
-                args.num_epochs, args.vocab_size, args.d_model, args.num_layers, args.num_heads, args.d_ff,
-                args.context_length, args.theta, args.lr, (args.beta1, args.beta2), args.weight_decay, run)
+    train_model(train_data_path=args.train_path, valid_data_path=args.valid_path, device=args.device,
+                checkpoint_path=args.checkpoint_path, log_freq=args.log_freq, batch_size=args.batch_size,
+                num_epochs=args.num_epochs, vocab_size=args.vocab_size, d_model=args.d_model, num_layers=args.num_layers,
+                num_heads=args.num_heads, d_ff=args.d_ff, context_length=args.context_length, theta=args.theta,
+                alpha_max=args.alpha_max, alpha_min=args.alpha_min, T_warm=args.T_warm, T_cos=args.T_cos,
+                clipped_norm=args.clipped_norm, betas=(args.beta1, args.beta2), weight_decay=args.weight_decay, run=run)
 
     run.finish()
 
