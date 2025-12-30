@@ -21,6 +21,7 @@ class Tokenizer:
         self.merges = {k: v for v, k in enumerate(merges)}
         special_tokens = None if special_tokens is None else sorted(special_tokens, key=lambda x : len(x), reverse=True)
         self.special_token_pattern = None if special_tokens is None or len(special_tokens) == 0 else '|'.join([re.escape(tk) for tk in special_tokens])
+        self.cache = dict()
 
     @classmethod
     def from_files(cls, vocab_filepath: str, merges_filepath: str, special_tokens: list[str]|None=None):
@@ -30,6 +31,8 @@ class Tokenizer:
 
 
     def token_encode(self, token: str) -> list[int]:
+        if token in self.cache:
+            return self.cache[token]
         head = create_linked_lst(token.encode("utf-8"))
 
         while True:
@@ -62,6 +65,7 @@ class Tokenizer:
             output.append(self.rev_vocab_map[current.val])
             current = current.next
 
+        self.cache[token] = output
         return output
 
 
