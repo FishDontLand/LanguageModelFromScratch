@@ -1,5 +1,6 @@
 import math
 import os
+from argparse import Namespace
 
 import numpy as np
 import torch
@@ -12,6 +13,53 @@ from cs336_basics.module import TransformerLM
 from cs336_basics.optimizer import AdamW
 from cs336_basics.utils import data_loading, cross_entropy, save_checkpoint, learning_rate_schedule, gradient_clipping
 
+
+def setup_train_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--train_path", help="path to training data", type=str)
+    parser.add_argument("--valid_path", help="path to validation data", type=str)
+    parser.add_argument("--batch_size", help="batch size", type=int)
+    parser.add_argument("--device", help="device to run language model", type=str)
+    parser.add_argument("--checkpoint_path", help="path to save checkpoints", type=str)
+    parser.add_argument("--log_freq", help="frequency of logging", type=int)
+    parser.add_argument("--num_epochs", help="number of training epochs", type=int)
+    parser.add_argument("--vocab_size", help="vocabulary size", type=int)
+    parser.add_argument("--d_model", help="dimension of embedding", type=int)
+    parser.add_argument("--d_ff", help="dimension of SwiGlu", type=int)
+    parser.add_argument("--num_layers", help="number of transformer blocks", type=int)
+    parser.add_argument("--num_heads", help="number of attention heads", type=int)
+    parser.add_argument("--context_length", help="length of sentence", type=int)
+    parser.add_argument("--theta", help="theta or RoPE", type=float)
+    parser.add_argument("--alpha_max", help="max learning rate", type=float)
+    parser.add_argument("--alpha_min", help="min learning rate", type=float)
+    parser.add_argument("--T_warm", help="warmup period", type=float)
+    parser.add_argument("--T_cos", help="cosine period", type=float)
+    parser.add_argument("--clipped_norm", help="max norm to clip", type=float)
+    parser.add_argument("--beta1", help="beta1 of AdamW", type=float)
+    parser.add_argument("--beta2", help="beta2 of AdamW2", type=float)
+    parser.add_argument("--weight_decay", help="weight decay of AdamW", type=float)
+
+    return parser
+
+def get_model_hyper_params(args: Namespace) -> dict:
+    model_hyper_params = {
+        "vocab_size": args.vocab_size,
+        "d_model": args.d_model,
+        "num_layers": args.num_layers,
+        "num_heads": args.num_heads,
+        "d_ff": args.d_ff,
+        "context_length": args.context_length,
+        "theta": args.theta,
+    }
+    return model_hyper_params
+
+def get_optimizer_hyper_params(args: Namespace) -> dict:
+    optimizer_hyper_params = {
+        "lr": args.alpha_min,
+        "betas": (args.beta1, args.beta2),
+        "weight_decay": args.weight_decay,
+    }
+    return optimizer_hyper_params
 
 def train_model(train_data_path: str, valid_data_path: str, batch_size: int, device: str,
                 checkpoint_path: str|os.PathLike, log_freq: int,
@@ -79,47 +127,12 @@ def train_model(train_data_path: str, valid_data_path: str, batch_size: int, dev
 
 
 if __name__ == '__main__':
-    parser=argparse.ArgumentParser()
-    parser.add_argument("--train_path", help="path to training data", type=str)
-    parser.add_argument("--valid_path", help="path to validation data", type=str)
-    parser.add_argument("--batch_size", help="batch size", type=int)
-    parser.add_argument("--device", help="device to run language model", type=str)
-    parser.add_argument("--checkpoint_path", help="path to save checkpoints", type=str)
-    parser.add_argument("--log_freq", help="frequency of logging", type=int)
-    parser.add_argument("--num_epochs", help="number of training epochs", type=int)
-    parser.add_argument("--vocab_size", help="vocabulary size", type=int)
-    parser.add_argument("--d_model", help="dimension of embedding", type=int)
-    parser.add_argument("--d_ff", help="dimension of SwiGlu", type=int)
-    parser.add_argument("--num_layers", help="number of transformer blocks", type=int)
-    parser.add_argument("--num_heads", help="number of attention heads", type=int)
-    parser.add_argument("--context_length", help="length of sentence", type=int)
-    parser.add_argument("--theta", help="theta or RoPE", type=float)
-    parser.add_argument("--alpha_max", help="max learning rate", type=float)
-    parser.add_argument("--alpha_min", help="min learning rate", type=float)
-    parser.add_argument("--T_warm", help="warmup period", type=float)
-    parser.add_argument("--T_cos", help="cosine period", type=float)
-    parser.add_argument("--clipped_norm", help="max norm to clip", type=float)
-    parser.add_argument("--beta1", help="beta1 of AdamW", type=float)
-    parser.add_argument("--beta2", help="beta2 of AdamW2", type=float)
-    parser.add_argument("--weight_decay", help="weight decay of AdamW", type=float)
-
+    parser = setup_train_parser()
     args = parser.parse_args()
-    model_hyper_params = {
-        "vocab_size": args.vocab_size,
-        "d_model": args.d_model,
-        "num_layers": args.num_layers,
-        "num_heads": args.num_heads,
-        "d_ff": args.d_ff,
-        "context_length": args.context_length,
-        "theta": args.theta,
-    }
-    optimizer_hyper_params = {
-        "lr": args.alpha_min,
-        "betas": (args.beta1, args.beta2),
-        "weight_decay": args.weight_decay,
-    }
+    model_hyper_params = get_model_hyper_params(args)
+    optimizer_hyper_params = get_optimizer_hyper_params(args)
     run = wandb.init(
-        # Set the wandb entity where your project will be logged (generally your team name).
+        # Set the wandb entity where your project will be logged (generally youdfr team name).
         entity="dyu68-georgia-institute-of-technology",
         # Set the wandb project where this run will be logged.
         project="TrainLM",

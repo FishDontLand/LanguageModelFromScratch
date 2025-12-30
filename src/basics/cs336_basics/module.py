@@ -82,7 +82,7 @@ class RoPE(torch.nn.Module):
             'row, col -> row col', numerator, denominator
         )
         rotations = torch.stack([torch.cos(theta), torch.sin(theta)], dim=-1)
-        self.rotations = torch.view_as_complex(rotations)
+        self.register_buffer("rotations", torch.view_as_complex(rotations), persistent=False)
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor):
         dim_except_last = x.size()[:-1]
