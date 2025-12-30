@@ -56,35 +56,33 @@ if __name__ == "__main__":
     inf_parser = setup_inference_parser()
     inf_args = inf_parser.parse_args()
 
-    # wandb_folder = inf_args.wandb_path
-    # folders = os.listdir(wandb_folder)
-    #
-    # log_folder = [f for f in folders if f.endswith(inf_args.run_id)][0]
-    # config_file  = os.path.join(wandb_folder, log_folder, 'files', 'config.yaml')
-    #
-    # with open(config_file, 'r') as f:
-    #     cfg = yaml.safe_load(f)
-    #
-    # model_hyper_params = cfg['model']['value']
-    # optimizer_hyper_params = cfg['optimizer']['value']
-    # # lr might be read in as str
-    # optimizer_hyper_params['lr'] = eval(optimizer_hyper_params['lr'])
-    # device = cfg['device']['value']
-    #
-    # lm = TransformerLM(**model_hyper_params)
-    # optimizer = AdamW(lm.parameters(), **optimizer_hyper_params)
-    #
-    # checkpoint_folder = cfg['checkpoint']['value']
-    # checkpoint_file = cfg['checkpoint_file']['value']
-    #
-    # load_checkpoint(os.path.join(checkpoint_folder, checkpoint_file), lm, optimizer)
-    tokenizer = Tokenizer.from_files(inf_args.vocab_file, inf_args.merge_file)
-    # while True:
-    #     user_input = input("Enter prompt\n")
-    #     if user_input.lower() == 'exit':
-    #         break
-    # user_input = "we need to stay"
-    # answer = decode(user_input, lm, device, inf_args.max_tokens, inf_args.temperature, inf_args.p, tokenizer)
-    answer = tokenizer.decode([ 4695, 47, 285, 418, 324, 45, 317, 535, 483, 259, 558, 9414, 267, 362, 364, 266, 322, 731, 266, 263, 3095, 47, 285, 3095, 283, 259, 376, 1008, 47, 11, 61, 125, 353, 112, 791, 3273, 125, 63, 11, 430, 439, 259, 398, 45, 401, 283, 259, 911, 390, 477, 1022, 683, 47, 339, 283, 391, 894, 370, 490, 47, 11, 61, 125, 353 ])
-    print("Model Answer: ", answer)
+    wandb_folder = inf_args.wandb_path
+    folders = os.listdir(wandb_folder)
+
+    log_folder = [f for f in folders if f.endswith(inf_args.run_id)][0]
+    config_file  = os.path.join(wandb_folder, log_folder, 'files', 'config.yaml')
+
+    with open(config_file, 'r') as f:
+        cfg = yaml.safe_load(f)
+
+    model_hyper_params = cfg['model']['value']
+    optimizer_hyper_params = cfg['optimizer']['value']
+    # lr might be read in as str
+    optimizer_hyper_params['lr'] = eval(optimizer_hyper_params['lr'])
+    device = cfg['device']['value']
+
+    lm = TransformerLM(**model_hyper_params)
+    optimizer = AdamW(lm.parameters(), **optimizer_hyper_params)
+
+    checkpoint_folder = cfg['checkpoint']['value']
+    checkpoint_file = cfg['checkpoint_file']['value']
+
+    load_checkpoint(os.path.join(checkpoint_folder, checkpoint_file), lm, optimizer)
+    tokenizer = Tokenizer.from_files(inf_args.vocab_file, inf_args.merge_file, ['<|endoftext|>'])
+    while True:
+        user_input = input("Enter prompt\n")
+        if user_input.lower() == 'exit':
+            break
+        answer = decode(user_input, lm, device, inf_args.max_tokens, inf_args.temperature, inf_args.p, tokenizer)
+        print("Model Answer: ", answer)
 
