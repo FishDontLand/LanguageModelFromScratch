@@ -81,16 +81,17 @@ class RoPE(torch.nn.Module):
         theta = einx.divide(
             'row, col -> row col', numerator, denominator
         )
-        rotations = torch.stack([torch.cos(theta), torch.sin(theta)], dim=-1)
-        self.register_buffer("rotations", torch.view_as_complex(rotations), persistent=False)
+        rotations_x = torch.stack([torch.cos(theta), -torch.sin(theta)], dim=-1)
+        rotations_y = torch.stack([torch.sin(theta), torch.cos(theta)], dim=-1)
+        rotations = torch.stack([rotations_x, rotations_y], dim=-1)
+        self.register_buffer("rotations", rotations, persistent=False)
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor):
         dim_except_last = x.size()[:-1]
         x = x.view(*dim_except_last, -1, 2)
-        x = torch.view_as_complex(x)
-        rotation = self.rotations[token_positions]
-        x_rotated = x * rotation
-        x_rotated = torch.view_as_real(x_rotated)
+        token_positions = token_positions.expand(*dim_except_last)
+        rotations = self.rotations[token_positions, :, :]
+        x_rotated = einx.dot('... len d_model before_rot, ... len d_model before_rot after_rot -> ... len d_model after_rot', x, rotations)
         return x_rotated.view(*dim_except_last, -1)
 
 
