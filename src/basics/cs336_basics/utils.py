@@ -5,6 +5,7 @@ import typing
 import einx
 import torch
 import numpy as np
+import torch.cuda.nvtx as nvtx
 
 class Node:
     """

@@ -96,7 +96,16 @@ class RoPE(torch.nn.Module):
 
 
 class MultiheadSelfAttention(torch.nn.Module):
-    def __init__(self, d_model: int, num_heads: int, max_seq_len: int|None=None, theta: float|None=None, device: torch.device|None=None, dtype=None):
+    def __init__(self, d_model: int, num_heads: int|None, max_seq_len: int|None=None, theta: float|None=None, device: torch.device|None=None, dtype=None):
+        """
+        Args:
+            d_model: dimension of embedding
+            num_heads: number of attention heads, if None, head dimension is removed
+            max_seq_len: maximum sequence length
+            theta: rotation parameter for RoPE
+            device: device of model
+            dtype: data type of model
+        """
         super().__init__()
         self.q_proj = Linear(d_model, d_model, device=device, dtype=dtype)
         self.k_proj = Linear(d_model, d_model, device=device, dtype=dtype)
@@ -107,16 +116,20 @@ class MultiheadSelfAttention(torch.nn.Module):
         if max_seq_len is None or theta is None:
             self.RoPE = None
         else:
-            self.RoPE = RoPE(theta=theta, d_k=d_model // num_heads, max_seq_len=max_seq_len, device=device)
+            self.RoPE = RoPE(theta=theta, d_k=d_model if num_heads is None else d_model // num_heads,
+                             max_seq_len=max_seq_len, device=device)
 
     def forward(self, x, token_positions: torch.Tensor|None=None):
         seq_len = x.size(-2)
         Q = self.q_proj(x)
-        Q = einx.rearrange('... seq_len (h d_k) -> ... h seq_len d_k', Q, h=self.num_heads)
+        if self.num_heads is not None:
+            Q = einx.rearrange('... seq_len (h d_k) -> ... h seq_len d_k', Q, h=self.num_heads)
         K = self.k_proj(x)
-        K = einx.rearrange('... seq_len (h d_k) -> ... h seq_len d_k', K, h=self.num_heads)
+        if self.num_heads is not None:
+            K = einx.rearrange('... seq_len (h d_k) -> ... h seq_len d_k', K, h=self.num_heads)
         V = self.v_proj(x)
-        V = einx.rearrange('... seq_len (h d_v) -> ... h seq_len d_v', V, h=self.num_heads)
+        if self.num_heads is not None:
+            V = einx.rearrange('... seq_len (h d_v) -> ... h seq_len d_v', V, h=self.num_heads)
 
         if token_positions is not None:
             Q = self.RoPE.forward(Q, token_positions)
@@ -129,12 +142,13 @@ class MultiheadSelfAttention(torch.nn.Module):
                          torch.ones(K.size()[:-2], dtype=torch.bool, device=self.device), masks)
 
         output = scaled_dot_product_attention(Q, K, V, masks)
-        output = einx.rearrange('... h seq_len d_k -> ... seq_len (h d_k)', output)
+        if self.num_heads is not None:
+            output = einx.rearrange('... h seq_len d_k -> ... seq_len (h d_k)', output)
 
         return self.output_proj.forward(output)
 
 class TransformerBlock(torch.nn.Module):
-    def __init__(self, d_model: int, num_heads: int, d_ff: int, eps: float=1e-5,
+    def __init__(self, d_model: int, num_heads: int|None, d_ff: int, eps: float=1e-5,
                  max_seq_len: int|None=None, theta: float|None=None,
                  dtype: torch.dtype|None=None, device: torch.device|None=None):
         super().__init__()
@@ -157,7 +171,7 @@ class TransformerBlock(torch.nn.Module):
         return feed_forward_x + processed_x
 
 class TransformerLM(torch.nn.Module):
-    def __init__(self, vocab_size: int, d_model: int, num_layers: int, num_heads: int, d_ff: int, 
+    def __init__(self, vocab_size: int, d_model: int, num_layers: int, num_heads: int|None, d_ff: int,
                  context_length: int, theta: float, eps: float=1e-5,  
                  dtype: torch.dtype|None=None, device: torch.device|None=None):
         super().__init__()
