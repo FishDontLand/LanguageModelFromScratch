@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cs336-lm"
+version = "0.1.0"
+description = "Language modeling, training systems, and reasoning post-training"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license-files = ["LICENSE", "licenses/*.txt"]
+dependencies = [
+    "einx~=0.3.0",
+    "numpy",
+    "pylatexenc==2.10",
+    "math-verify[antlr4-13-2]==0.7.0",
+    "latex2sympy2-extended",
+    "pyyaml",
+    "regex",
+    "sympy",
+    "torch>=2.5.1,<2.7; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+    "torch~=2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "tqdm",
+    "wandb>=0.19.7",
+]
+
+[project.optional-dependencies]
+test = ["einops", "jaxtyping", "psutil", "pytest>=8.3.4", "tiktoken"]
+benchmarks = ["pandas"]
+post-training = [
+    "datasets>=3.5,<4",
+    "huggingface-hub",
+    "transformers~=4.51.3",
+    "vllm==0.7.2; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["cs336", "cs336.*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+"cs336.post_training" = ["prompts/*.prompt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
