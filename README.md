@@ -1,30 +1,37 @@
-# CS336 Spring 2025 Assignment 5: Alignment
+# Language Modeling from Scratch
 
-For a full description of the assignment, see the assignment handout at
-[cs336_spring2025_assignment5_alignment.pdf](./cs336_spring2025_assignment5_alignment.pdf)
+This project follows [Stanford CS336](https://stanford-cs336.github.io/) and brings together language modeling, training systems, and reasoning post-training.
 
-We include a supplemental (and completely optional) assignment on safety alignment, instruction tuning, and RLHF at [cs336_spring2025_assignment5_supplement_safety_rlhf.pdf](./cs336_spring2025_assignment5_supplement_safety_rlhf.pdf)
+| Package | Contents |
+| --- | --- |
+| `lmstack.lm` | Byte-pair encoding, a decoder-only Transformer, AdamW, checkpointing, and generation |
+| `lmstack.systems` | Profiling, FlashAttention-2, distributed data parallelism, and optimizer state sharding. Uses the model and optimizer in `lmstack.lm`. |
+| `lmstack.post_training` | Supervised fine-tuning, expert iteration, GRPO, and math-answer grading |
 
-If you see any issues with the assignment handout or code, please feel free to
-raise a GitHub issue or open a pull request with a fix.
+## Install
 
-## Setup
+Use Python 3.11 or 3.12 and run the install from the repository root.
 
-As in previous assignments, we use `uv` to manage dependencies.
-
-1. Install all packages except `flash-attn`, then all packages (`flash-attn` is weird)
-```
-uv sync --no-install-package flash-attn
-uv sync
+```bash
+python -m pip install -e .
 ```
 
-2. Run unit tests:
-
-``` sh
-uv run pytest
+```python
+from lmstack.lm.module import TransformerLM
+from lmstack.systems.ddp import BucketDDP
+from lmstack.post_training.grpo import compute_grpo_clip_loss
 ```
 
-Initially, all tests should fail with `NotImplementedError`s.
-To connect your implementation to the tests, complete the
-functions in [./tests/adapters.py](./tests/adapters.py).
+Install `.[test]` to run the test suite with `python -m pytest`. Distributed CPU tests require local TCP sockets. Triton tests and GPU benchmarks require compatible NVIDIA hardware. Install `.[benchmarks]` to run the benchmark scripts in `benchmarks/systems/`.
 
+## Post-training
+
+The tensor-level SFT and GRPO helpers can be used without vLLM. To run rollouts, install `.[post-training]` on Linux x86-64 with two compatible NVIDIA GPUs. The runners put the policy on CUDA device 0 and vLLM on device 1.
+
+```bash
+python -m pip install -e ".[post-training]"
+python -m lmstack.post_training.prepare --data-dir data
+python -m lmstack.post_training.grpo
+```
+
+`run_rl` and `run_expert_iteration` accept a `model_id` or local checkpoint path and a `data_dir` containing `train.jsonl` and `test.jsonl`. The model defaults to Qwen2.5-Math-1.5B. The math grader retains its upstream attribution in the source.

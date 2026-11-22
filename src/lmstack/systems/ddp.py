@@ -1,0 +1,451 @@
+import timeit
+from collections import defaultdict
+from typing import Iterator, Type, Any, Optional, Callable
+
+import torch
+import torch.distributed as dist
+import copy
+from lmstack.lm.module import Linear, RMSNorm
+import torch.multiprocessing as mp
+import os
+from lmstack.lm.optimizer import AdamW
+from torch.nn import Parameter
+from torch.optim import Optimizer
+
+
+def setup(rank: int, world_size: int, device_type: str):
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "29500"
+
+    if device_type == 'cuda':
+        dist.init_process_group("nccl", rank=rank, world_size=world_size)
+        torch.cuda.set_device(rank)
+    else:
+        dist.init_process_group("gloo", rank=rank, world_size=world_size)
+
+class ToyModel(torch.nn.Module):
+    def __init__(self, in_features: int, out_features: int, dtype: torch.dtype|None):
+        super().__init__()
+        self.fc1 = Linear(in_features, 10, dtype=dtype)
+        self.rms_norm = RMSNorm(10, dtype=dtype)
+        self.fc2 = Linear(10, out_features, dtype=dtype)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = torch.sigmoid(x)
+        x = self.rms_norm(x)
+        x = self.fc2(x)
+        return x
+
+def non_parallel_train(train_steps, model: torch.nn.Module, data:torch.tensor, device_type: str):
+    non_parallel_model = copy.deepcopy(model)
+    non_parallel_model = non_parallel_model.to(device_type)
+    optimizer = AdamW(non_parallel_model.parameters(), lr=1e-3, betas=(0.9, 0.999), weight_decay=0.01)
+
+    for _ in range(train_steps):
+        optimizer.zero_grad()
+        output = non_parallel_model(data)
+        loss = (output * output).mean()
+        loss.backward()
+        optimizer.step()
+
+    return non_parallel_model.to('cpu').state_dict()
+
+def naive_dist_training(rank: int, world_size: int, warmup_steps: int, model: torch.nn.Module, data: torch.tensor,
+                  device_type: str, shared_dict=None, tracking_op=None, use_flatten=False):
+    if tracking_op is not None and tracking_op not in ['full_step', 'communication']:
+        raise ValueError('Unknown tracking operation')
+    setup(rank, world_size, device_type)
+    batch_size = data.size(0) // world_size
+    start_idx = rank * batch_size
+    end_idx = start_idx + batch_size
+    data_batch = data[start_idx:end_idx]
+    data_batch = data_batch.to(device_type)
+    assert len(data_batch) == batch_size
+
+    rank_model = copy.deepcopy(model)
+    rank_model = rank_model.to(device_type)
+    optimizer = AdamW(rank_model.parameters(), lr=1e-3, betas=(0.9, 0.999), weight_decay=0.01)
+    all_run_time = [None for _ in range(world_size)]
+    for i in range(warmup_steps + 1):
+        if i == warmup_steps and tracking_op == 'full_step':
+            dist.barrier()
+            start_time = timeit.default_timer()
+        optimizer.zero_grad()
+        output = rank_model(data_batch)
+        loss = (output * output).mean()
+        loss.backward()
+
+        if i == warmup_steps and tracking_op == 'communication':
+            dist.barrier()
+            start_time = timeit.default_timer()
+        if use_flatten:
+            flattened_grads = []
+            for p in rank_model.parameters():
+                if p.grad is not None:
+                    flattened_grads.append(p.grad.flatten())
+            flattened_grads = torch.concat(flattened_grads)
+            if device_type == 'cuda':
+                dist.all_reduce(flattened_grads, op=dist.ReduceOp.AVG, async_op=False)
+            else:
+                dist.all_reduce(flattened_grads, op=dist.ReduceOp.SUM, async_op=False)
+        else:
+            for p in rank_model.parameters():
+                if p.grad is not None:
+                    if device_type == 'cuda':
+                        dist.all_reduce(tensor=p.grad, op=dist.ReduceOp.AVG, async_op=False)
+                    else:
+                        dist.all_reduce(tensor=p.grad, op=dist.ReduceOp.SUM, async_op=False)
+
+        if i == warmup_steps and tracking_op == 'communication':
+            dist.barrier()
+            end_time = timeit.default_timer()
+            dist.all_gather_object(all_run_time, end_time - start_time)
+
+        if use_flatten:
+            if device_type != 'cuda':
+                flattened_grads = flattened_grads / world_size
+            offset = 0
+            for p in rank_model.parameters():
+                if p.grad is not None:
+                    p.grad = flattened_grads[offset : (offset + p.grad.numel())].view(p.size())
+                    offset += p.grad.numel()
+        else:
+            if device_type != 'cuda':
+                for p in rank_model.parameters():
+                    if p.grad is not None:
+                        p.grad = p.grad / world_size
+
+        optimizer.step()
+        if i == warmup_steps and tracking_op == 'full_step':
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            dist.barrier()
+            end_time = timeit.default_timer()
+            dist.all_gather_object(all_run_time, end_time - start_time)
+
+    if rank == 0:
+        if shared_dict is not None:
+            shared_dict['result'] = rank_model.to('cpu').state_dict()
+        if tracking_op is not None:
+            avg_time = sum(all_run_time) / len(all_run_time)
+            print(f'average run time: {avg_time}')
+
+def compare_training_result(device_type='cpu', train_steps=1):
+    world_size = 4
+    batch_size = 64
+    seq_len = 1024
+    feature_size = 128
+    data = torch.randn(batch_size, seq_len, feature_size)
+
+    if device_type == 'cuda' and torch.cuda.is_available() and torch.cuda.device_count() >= world_size:
+        device_type = 'cuda'
+    elif device_type != 'cpu':
+        print(f'device type {device_type} not supported, switched to cpu mode')
+        device_type = 'cpu'
+
+    model = ToyModel(feature_size, feature_size, dtype=torch.float32)
+    non_parallel_result = non_parallel_train(train_steps, model, data, device_type)
+
+    manager = mp.Manager()
+    shared_dict = manager.dict()
+    mp.spawn(fn=naive_dist_training, args=(world_size, train_steps - 1, model, data, device_type, shared_dict, None, True), nprocs=world_size, join=True)
+
+
+    max_abs_diff = 0
+    for name in non_parallel_result:
+        param1 = non_parallel_result[name]
+        param2 = shared_dict['result'][name]
+        max_abs_diff = max(max_abs_diff, torch.abs(param1 - param2).max())
+        assert torch.allclose(param1, param2), torch.abs(param1 - param2).max()
+    print(max_abs_diff)
+
+
+class DDP(torch.nn.Module):
+    def __init__(self, module: torch.nn.Module):
+        super().__init__()
+        self.module = module
+        self.is_cuda = None
+        self.handles = []
+        for p in self.module.parameters():
+            if self.is_cuda is None:
+                self.is_cuda = p.is_cuda
+            self.handles.append(dist.broadcast(p.data, 0, async_op=True))
+            if p.requires_grad:
+                p.register_post_accumulate_grad_hook(self.hook)
+        for handle in self.handles:
+            handle.wait()
+        self.handles.clear()
+
+    def hook(self, tensor: torch.tensor) -> None:
+        if self.is_cuda:
+            handle = dist.all_reduce(tensor.grad, op=dist.ReduceOp.AVG, async_op=True)
+        else:
+            handle = dist.all_reduce(tensor.grad, op=dist.ReduceOp.SUM, async_op=True)
+        self.handles.append(handle)
+
+    def forward(self, *inputs, **kwargs):
+        return self.module(*inputs, **kwargs)
+
+    def finish_gradient_synchronization(self):
+        for handle in self.handles:
+            handle.wait()
+        self.handles.clear()
+        if not self.is_cuda:
+            group_size = dist.get_world_size()
+            for p in self.module.parameters():
+                if p.grad is not None:
+                    p.grad = p.grad / group_size
+
+class BucketDDP(torch.nn.Module):
+    def __init__(self, module: torch.nn.Module, bucket_size_mb: float):
+        super().__init__()
+        self.module = module
+        self.bucket_size_mb = bucket_size_mb
+        self.handles = []
+        self.is_cuda = None
+        self.mb_to_bytes = 2 ** 20
+
+        self.construct_buckets(self.module.named_parameters())
+
+        for tensor in self.bucket_tensors:
+            self.handles.append(dist.broadcast(tensor.data, 0, async_op=True))
+
+        for handle in self.handles:
+            handle.wait()
+        self.handles.clear()
+
+        for name, p in self.module.named_parameters():
+            restored_param = torch.empty(p.numel(), dtype=p.dtype, device=p.device)
+            offset = 0
+            for bucket_idx, start, end in self.linked_bucket[name]:
+                restored_param[offset:offset + (end - start)] = self.bucket_tensors[bucket_idx][start:end]
+                offset += end - start
+            p.data = restored_param.view(p.size())
+
+        # only keep track of the parameters with gradients
+        self.construct_buckets(self.get_grad_param_iter())
+
+        for name, p in self.get_grad_param_iter():
+            p.register_post_accumulate_grad_hook(self.hook)
+
+    def get_grad_param_iter(self)->Iterator[tuple[str, Parameter]]:
+        named_param_lst = list(self.module.named_parameters())
+        for i in range(len(named_param_lst) - 1, -1, -1):
+            n, p = named_param_lst[i]
+            if p.requires_grad:
+                yield n, p
+
+    def construct_buckets(self, param_iter: Iterator[tuple[str, Parameter]]):
+        self.linked_bucket = dict()
+        self.bucket_tensors = []
+        self.bucket_param_count = []
+        self.counter = []
+        self.param_to_name = dict()
+
+        bucket = []
+        bucket_names = []
+        bucket_offsets = [0]
+        size = 0
+        bucket_idx = 0
+
+        for name, p in param_iter:
+            if self.is_cuda is None:
+                self.is_cuda = p.is_cuda
+
+            self.param_to_name[id(p)] = name
+            current_p = p.flatten()
+            bucketed_elements = 0
+
+            while bucketed_elements < p.numel():
+                remain_size = (p.numel() - bucketed_elements) * p.element_size() / self.mb_to_bytes
+                if size + remain_size > self.bucket_size_mb:
+                    ratio = (self.bucket_size_mb - size) / remain_size
+                    bucket_remain_elements = int(p.numel() * ratio)
+
+                    if bucket_remain_elements > 0:
+                        bucket.append(current_p[bucketed_elements:bucketed_elements + bucket_remain_elements])
+                        bucket_names.append(name)
+                        bucket_offsets.append(bucket_offsets[-1] + bucket_remain_elements)
+
+                    num_params = len(bucket)
+                    bucket_tensor = torch.concat(bucket)
+                    bucketed_elements += bucket_remain_elements
+
+                    for i in range(len(bucket_names)):
+                        if bucket_names[i] not in self.linked_bucket:
+                            self.linked_bucket[bucket_names[i]] = [[bucket_idx, bucket_offsets[i], bucket_offsets[i + 1]]]
+                        else:
+                            self.linked_bucket[bucket_names[i]].append([bucket_idx, bucket_offsets[i], bucket_offsets[i + 1]])
+
+                    self.bucket_tensors.append(bucket_tensor)
+                    self.bucket_param_count.append(num_params)
+                    self.counter.append(0)
+
+                    size = 0
+                    bucket_idx += 1
+                    bucket_names.clear()
+                    bucket.clear()
+                    bucket_offsets.clear()
+                    bucket_offsets.append(0)
+                else:
+                    bucket.append(current_p[bucketed_elements:])
+                    bucket_names.append(name)
+                    size += (p.numel() - bucketed_elements) * p.element_size() / self.mb_to_bytes
+                    bucket_offsets.append(bucket_offsets[-1] + p.numel() - bucketed_elements)
+                    bucketed_elements = p.numel()
+
+        if bucket:
+            num_params = len(bucket)
+            bucket_tensor = torch.concat(bucket)
+            self.handles.append(dist.broadcast(bucket_tensor, 0, async_op=True))
+            for i in range(len(bucket_names)):
+                if bucket_names[i] not in self.linked_bucket:
+                    self.linked_bucket[bucket_names[i]] = [[bucket_idx, bucket_offsets[i], bucket_offsets[i + 1]]]
+                else:
+                    self.linked_bucket[bucket_names[i]].append([bucket_idx, bucket_offsets[i], bucket_offsets[i + 1]])
+
+            self.bucket_tensors.append(bucket_tensor)
+            self.bucket_param_count.append(num_params)
+            self.counter.append(0)
+
+    def hook(self, p: torch.tensor):
+        offset = 0
+        flat_grad = p.grad.flatten()
+        name = self.param_to_name[id(p)]
+        for bucket_idx, start, end in self.linked_bucket[name]:
+            self.bucket_tensors[bucket_idx][start:end] = flat_grad[offset:offset + end - start]
+            self.counter[bucket_idx] += 1
+            offset += end - start
+
+            if self.counter[bucket_idx] == self.bucket_param_count[bucket_idx]:
+
+                if self.is_cuda:
+                    self.handles.append(dist.all_reduce(self.bucket_tensors[bucket_idx], op=dist.ReduceOp.AVG, async_op=True))
+                else:
+                    self.handles.append(dist.all_reduce(self.bucket_tensors[bucket_idx], op=dist.ReduceOp.SUM, async_op=True))
+
+    def forward(self, *inputs, **kwargs):
+        return self.module(*inputs, **kwargs)
+
+    def finish_gradient_synchronization(self):
+        for handle in self.handles:
+            handle.wait()
+        self.handles.clear()
+
+        for name, p in self.get_grad_param_iter():
+            restored_param = torch.empty(p.numel(), device=p.device, dtype=p.grad.dtype)
+            offset = 0
+            for bucket_idx, start, end in self.linked_bucket[name]:
+                restored_param[offset:offset + end - start] = self.bucket_tensors[bucket_idx][start:end]
+                offset += end - start
+
+            p.grad = restored_param.view(p.size())
+            if not self.is_cuda:
+                p.grad /= dist.get_world_size()
+
+class DistributedOptimizer(torch.optim.Optimizer):
+    def __init__(self, params, optimizer_cls: Type[Optimizer], **kwargs: Any):
+        super().__init__(params, kwargs)
+        self.kwargs = kwargs
+        self.world_size = dist.get_world_size()
+        self.optimizer_state = None
+        self.optimizer_cls = optimizer_cls
+        self.rank = dist.get_rank()
+
+    def step(self, closure: Optional[Callable]=None, **kwargs):
+        loss = None if closure is None else closure()
+
+        handles = []
+        rank_group_lst = []
+        tensor_mapping = dict()
+
+        for group in self.param_groups:
+            rank_group = dict()
+            for name in group:
+                if name != 'params':
+                    rank_group[name] = group[name]
+                else:
+                    rank_params = []
+                    for idx, p in enumerate(group['params']):
+                        if p.grad is None:
+                            continue
+
+                        num_param_per_rank = p.numel() // self.world_size
+                        if num_param_per_rank * self.world_size < p.numel():
+                            num_param_per_rank += 1
+                            padding_size = p.numel() - num_param_per_rank * self.world_size
+                            p_data_flatten = torch.concat([p.data.flatten(),
+                                                      torch.empty(padding_size,
+                                                                  dtype=p.data.dtype, device=p.device)])
+                            p_grad_flatten = torch.concat([p.grad.flatten(),
+                                                           torch.empty(padding_size,
+                                                                       dtype=p.grad.dtype,
+                                                                       device=p.device)])
+                        else:
+                            p_data_flatten = p.data.flatten()
+                            p_grad_flatten = p.grad.flatten()
+
+
+                        sub_p_grad = torch.empty(num_param_per_rank, dtype=p.grad.dtype, device=p.device)
+                        rank_data = p_data_flatten[self.rank * num_param_per_rank:(self.rank + 1) * num_param_per_rank]
+                        sub_p = torch.nn.parameter.Parameter(data=rank_data)
+                        sub_p.grad = sub_p_grad
+                        rank_params.append(sub_p)
+                        tensor_mapping[p] = sub_p
+
+                        if sub_p.is_cuda:
+                            p_grad_handle = dist.reduce_scatter_tensor(sub_p.grad, p_grad_flatten,
+                                                                       op=dist.ReduceOp.AVG, async_op=True)
+                            handles.append(p_grad_handle)
+                        else:
+                            p_grad_handle = dist.reduce_scatter_tensor(sub_p.grad, p_grad_flatten,
+                                                                       op=dist.ReduceOp.SUM, async_op=True)
+                            handles.append(p_grad_handle)
+                    rank_group['params'] = rank_params
+
+            rank_group_lst.append(rank_group)
+
+        for handle in handles:
+            handle.wait()
+        handles.clear()
+
+        for group in rank_group_lst:
+            for idx, p in enumerate(group['params']):
+                if p.grad is None:
+                    continue
+                if not p.is_cuda:
+                    p.grad = p.grad / self.world_size
+
+        optimizer = self.optimizer_cls(rank_group_lst, **self.kwargs, **kwargs)
+
+        if self.optimizer_state is not None:
+            optimizer.load_state_dict(self.optimizer_state)
+
+        optimizer.step()
+
+        self.optimizer_state = optimizer.state_dict()
+
+        rev_tensor_mapping = {v: k for k, v in tensor_mapping.items()}
+
+        new_params = dict()
+        for group in optimizer.param_groups:
+            for p in group['params']:
+                full_p = torch.empty(p.size(0) * self.world_size, dtype=p.data.dtype, device=p.device)
+                handles.append(dist.all_gather_into_tensor(full_p, p.data, async_op=True))
+                new_params[rev_tensor_mapping[p]] = full_p
+
+        for handle in handles:
+            handle.wait()
+        handles.clear()
+
+        for group in self.param_groups:
+            for p in group['params']:
+                if p.grad is None:
+                    continue
+                p.data = new_params[p][:p.numel()].view(p.size())
+
+        return loss
+
+    def add_param_group(self, param_group):
+        self.param_groups.append(param_group)

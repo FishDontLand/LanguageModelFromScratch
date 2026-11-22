@@ -1,43 +1,49 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "alignment"
-version = "1.0.0"
-description = "CS 336 Spring 2025 Assignment 5: Alignment"
+name = "lmstack"
+version = "0.1.0"
+description = "Language modeling, training systems, and reasoning post-training"
 readme = "README.md"
-requires-python = ">=3.11,<3.13"  # Python 3.13 not yet supported for some deps
+requires-python = ">=3.11,<3.13"
+license-files = ["LICENSE", "licenses/*.txt"]
 dependencies = [
-    "accelerate>=1.5.2",
-    "alpaca-eval",
-    "flash-attn==2.7.4.post1",
-    "jupyter>=1.1.1",
-    "math-verify[antlr4-13-2]>=0.7.0",
+    "einx~=0.3.0",
+    "numpy",
     "pylatexenc==2.10",
-    "notebook>=7.4.2",
-    "pytest>=8.3.5",
-    "torch",
-    "tqdm>=4.67.1",
-    "transformers>=4.50.0",
-    "typer>=0.15.4",
-    "vllm==0.7.2",
-    "wandb>=0.19.8",
-    "xopen>=2.0.2",
+    "math-verify[antlr4-13-2]==0.7.0",
+    "latex2sympy2-extended",
+    "pyyaml",
+    "regex",
+    "sympy",
+    "torch>=2.5.1,<2.7; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+    "torch~=2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "tqdm",
+    "wandb>=0.19.7",
 ]
 
+[project.optional-dependencies]
+test = ["einops", "jaxtyping", "psutil", "pytest>=8.3.4", "tiktoken"]
+benchmarks = ["pandas"]
+post-training = [
+    "datasets>=3.5,<4",
+    "huggingface-hub",
+    "transformers~=4.51.3",
+    "vllm==0.7.2; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
+[tool.setuptools]
+include-package-data = false
+
 [tool.setuptools.packages.find]
-include = ["cs336_alignment"]
+where = ["src"]
+include = ["lmstack", "lmstack.*"]
+namespaces = false
 
-[tool.uv]
-package = true
-no-build-isolation-package = ["flash-attn"]
-
-
-[tool.uv.sources]
-alpaca-eval = { git = "https://github.com/nelson-liu/alpaca_eval.git", rev = "forward_kwargs_to_vllm" }
+[tool.setuptools.package-data]
+"lmstack.post_training" = ["prompts/*.prompt"]
 
 [tool.pytest.ini_options]
-log_cli = true
-log_cli_level = "WARNING"
-
-[[tool.uv.dependency-metadata]]
-name = "flash-attn"
-version = "2.7.4.post1"
-requires-dist = ["torch", "einops", "setuptools"]
+testpaths = ["tests"]
