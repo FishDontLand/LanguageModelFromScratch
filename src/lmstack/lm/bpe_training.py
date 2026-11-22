@@ -3,11 +3,11 @@ import datetime
 import os
 import regex as re
 from multiprocessing import Pool
-from cs336.lm.pretokenization_example import find_chunk_boundaries
+from lmstack.lm.pretokenization_example import find_chunk_boundaries
 from heapq import heappush, heappop, heapify
 import pickle
 
-from cs336.lm.utils import Node, PAT, create_linked_lst
+from lmstack.lm.utils import Node, PAT, create_linked_lst
 
 
 class MergeCountMap:

@@ -9,11 +9,11 @@ import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
-from cs336.lm.module import Linear, Embedding, RMSNorm, SwiGLU, RoPE, MultiheadSelfAttention, TransformerBlock, TransformerLM
-from cs336.lm.optimizer import AdamW
-from cs336.lm.utils import softmax, scaled_dot_product_attention, cross_entropy, learning_rate_schedule, \
+from lmstack.lm.module import Linear, Embedding, RMSNorm, SwiGLU, RoPE, MultiheadSelfAttention, TransformerBlock, TransformerLM
+from lmstack.lm.optimizer import AdamW
+from lmstack.lm.utils import softmax, scaled_dot_product_attention, cross_entropy, learning_rate_schedule, \
     gradient_clipping, data_loading, save_checkpoint, load_checkpoint
-from cs336.lm.tokenizer import Tokenizer
+from lmstack.lm.tokenizer import Tokenizer
 
 
 def run_linear(
@@ -631,5 +631,5 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    from cs336.lm.bpe_training import train_bpe
+    from lmstack.lm.bpe_training import train_bpe
     return train_bpe(input_path, vocab_size, special_tokens)

@@ -9,9 +9,9 @@ import wandb
 
 from tqdm import tqdm
 
-from cs336.lm.module import TransformerLM
-from cs336.lm.optimizer import AdamW
-from cs336.lm.utils import data_loading, cross_entropy, save_checkpoint, learning_rate_schedule, gradient_clipping
+from lmstack.lm.module import TransformerLM
+from lmstack.lm.optimizer import AdamW
+from lmstack.lm.utils import data_loading, cross_entropy, save_checkpoint, learning_rate_schedule, gradient_clipping
 
 
 def setup_train_parser() -> argparse.ArgumentParser:

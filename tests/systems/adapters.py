@@ -4,8 +4,8 @@ from typing import Type
 
 import torch
 
-from cs336.systems import flash_attention
-from cs336.systems.ddp import DDP, BucketDDP, DistributedOptimizer
+from lmstack.systems import flash_attention
+from lmstack.systems.ddp import DDP, BucketDDP, DistributedOptimizer
 
 
 def get_flashattention_autograd_function_pytorch() -> Type:

@@ -1,6 +1,6 @@
 import torch
 
-from cs336.post_training.grpo import (
+from lmstack.post_training.grpo import (
     compute_group_normalized_rewards,
     compute_grpo_clip_loss,
     compute_naive_policy_gradient_loss,

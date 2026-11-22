@@ -1,12 +1,12 @@
 # Language Modeling from Scratch
 
-This project follows Stanford CS336 and packages the language model, training systems, and reasoning post-training implementations in one Python distribution. [Stanford CS336](https://stanford-cs336.github.io/)
+This project follows [Stanford CS336](https://stanford-cs336.github.io/) and brings together language modeling, training systems, and reasoning post-training.
 
 | Package | Contents |
 | --- | --- |
-| `cs336.lm` | Byte-pair encoding, a decoder-only Transformer, AdamW, checkpointing, and generation |
-| `cs336.systems` | Profiling, FlashAttention-2, distributed data parallelism, and optimizer state sharding. Uses the model and optimizer in `cs336.lm`. |
-| `cs336.post_training` | Supervised fine-tuning, expert iteration, GRPO, and math-answer grading |
+| `lmstack.lm` | Byte-pair encoding, a decoder-only Transformer, AdamW, checkpointing, and generation |
+| `lmstack.systems` | Profiling, FlashAttention-2, distributed data parallelism, and optimizer state sharding. Uses the model and optimizer in `lmstack.lm`. |
+| `lmstack.post_training` | Supervised fine-tuning, expert iteration, GRPO, and math-answer grading |
 
 ## Install
 
@@ -17,9 +17,9 @@ python -m pip install -e .
 ```
 
 ```python
-from cs336.lm.module import TransformerLM
-from cs336.systems.ddp import BucketDDP
-from cs336.post_training.grpo import compute_grpo_clip_loss
+from lmstack.lm.module import TransformerLM
+from lmstack.systems.ddp import BucketDDP
+from lmstack.post_training.grpo import compute_grpo_clip_loss
 ```
 
 Install `.[test]` to run the test suite with `python -m pytest`. Distributed CPU tests require local TCP sockets. Triton tests and GPU benchmarks require compatible NVIDIA hardware. Install `.[benchmarks]` to run the benchmark scripts in `benchmarks/systems/`.
@@ -30,8 +30,8 @@ The tensor-level SFT and GRPO helpers can be used without vLLM. To run rollouts,
 
 ```bash
 python -m pip install -e ".[post-training]"
-python -m cs336.post_training.prepare --data-dir data
-python -m cs336.post_training.grpo
+python -m lmstack.post_training.prepare --data-dir data
+python -m lmstack.post_training.grpo
 ```
 
 `run_rl` and `run_expert_iteration` accept a `model_id` or local checkpoint path and a `data_dir` containing `train.jsonl` and `test.jsonl`. The model defaults to Qwen2.5-Math-1.5B. The math grader retains its upstream attribution in the source.

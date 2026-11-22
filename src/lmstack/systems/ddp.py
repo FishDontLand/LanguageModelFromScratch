@@ -5,10 +5,10 @@ from typing import Iterator, Type, Any, Optional, Callable
 import torch
 import torch.distributed as dist
 import copy
-from cs336.lm.module import Linear, RMSNorm
+from lmstack.lm.module import Linear, RMSNorm
 import torch.multiprocessing as mp
 import os
-from cs336.lm.optimizer import AdamW
+from lmstack.lm.optimizer import AdamW
 from torch.nn import Parameter
 from torch.optim import Optimizer
 

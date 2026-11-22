@@ -1,6 +1,6 @@
 import timeit
 
-from cs336.lm import module, optimizer, utils
+from lmstack.lm import module, optimizer, utils
 import torch
 import numpy as np
 import einx

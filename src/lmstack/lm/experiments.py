@@ -11,9 +11,9 @@ import os
 from tqdm import tqdm
 from multiprocessing import Pool
 
-from cs336.lm.optimizer import SGD
-from cs336.lm.pretokenization_example import find_chunk_boundaries
-from cs336.lm.tokenizer import Tokenizer
+from lmstack.lm.optimizer import SGD
+from lmstack.lm.pretokenization_example import find_chunk_boundaries
+from lmstack.lm.tokenizer import Tokenizer
 
 
 def tokenizer_experiment_a():

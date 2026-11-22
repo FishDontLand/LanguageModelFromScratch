@@ -2,9 +2,9 @@
 set -euo pipefail
 
 PARAM_FILE="$(dirname "${BASH_SOURCE[0]}")/params.txt"
-LOG_DIR="${CS336_LOG_DIR:-outputs/benchmark_logs}"
+LOG_DIR="${LMSTACK_LOG_DIR:-outputs/benchmark_logs}"
 MAX_PARALLEL=1
-PYTHON="${CS336_PYTHON:-python}"
+PYTHON="${LMSTACK_PYTHON:-python}"
 export PYTHON
 
 mkdir -p "$LOG_DIR"
@@ -21,6 +21,6 @@ nl -ba "$PARAM_FILE" | xargs -P "$MAX_PARALLEL" -I{} bash -lc '
   out="'"$LOG_DIR"'/run_${line_no}_mixed_precision.out"
 
   echo "Run ${line_no}: ${args}"
-  "$PYTHON" -m cs336.systems.monitoring $FIXED_ARGS ${args} >"${out}"
+  "$PYTHON" -m lmstack.systems.monitoring $FIXED_ARGS ${args} >"${out}"
 '
 echo "Done. Logs in: $LOG_DIR"

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-LOG_DIR="${CS336_LOG_DIR:-outputs/memory_logs}"
-PYTHON="${CS336_PYTHON:-python}"
+LOG_DIR="${LMSTACK_LOG_DIR:-outputs/memory_logs}"
+PYTHON="${LMSTACK_PYTHON:-python}"
 
 mkdir -p "$LOG_DIR"
 
@@ -31,16 +31,16 @@ for length in "${CONTEXT_LENGTH[@]}"; do
     for cast_precision in "${CAST_PRECISIONS[@]}";do
       if [[ "$forward_only" == "true" && "$cast_precision" == "true" ]]; then
         echo "Run: --context_length $LENGTH --forward_only --use_mixed_precision"
-        "$PYTHON" -m cs336.systems.monitoring $FIXED_ARGS --context_length $LENGTH --forward_only --use_mixed_precision --memory_log_path $SUB_SUB_DIR 2>>"$ERROR_LOG"
+        "$PYTHON" -m lmstack.systems.monitoring $FIXED_ARGS --context_length $LENGTH --forward_only --use_mixed_precision --memory_log_path $SUB_SUB_DIR 2>>"$ERROR_LOG"
       elif [[ "$forward_only" == "true" && "$cast_precision" == "false" ]]; then
         echo "Run: --context_length $LENGTH --forward_only"
-        "$PYTHON" -m cs336.systems.monitoring $FIXED_ARGS --context_length $LENGTH --forward_only --memory_log_path $SUB_SUB_DIR 2>>"$ERROR_LOG"
+        "$PYTHON" -m lmstack.systems.monitoring $FIXED_ARGS --context_length $LENGTH --forward_only --memory_log_path $SUB_SUB_DIR 2>>"$ERROR_LOG"
       elif [[ "$forward_only" == "false" && "$cast_precision" == "true" ]]; then
         echo "Run: --context_length $LENGTH --use_mixed_precision"
-        "$PYTHON" -m cs336.systems.monitoring $FIXED_ARGS --context_length $LENGTH --use_mixed_precision --memory_log_path $SUB_SUB_DIR 2>>"$ERROR_LOG"
+        "$PYTHON" -m lmstack.systems.monitoring $FIXED_ARGS --context_length $LENGTH --use_mixed_precision --memory_log_path $SUB_SUB_DIR 2>>"$ERROR_LOG"
       else
         echo "Run: --context_length $LENGTH"
-        "$PYTHON" -m cs336.systems.monitoring $FIXED_ARGS --context_length $LENGTH --memory_log_path $SUB_SUB_DIR 2>>"$ERROR_LOG"
+        "$PYTHON" -m lmstack.systems.monitoring $FIXED_ARGS --context_length $LENGTH --memory_log_path $SUB_SUB_DIR 2>>"$ERROR_LOG"
       fi
       done
     done

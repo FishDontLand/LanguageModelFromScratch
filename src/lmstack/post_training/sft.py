@@ -11,7 +11,7 @@ import torch
 import wandb
 from unittest.mock import patch
 
-from cs336.post_training.grading import r1_zero_reward_fn, extract_answer
+from lmstack.post_training.grading import r1_zero_reward_fn, extract_answer
 
 if TYPE_CHECKING:
     from transformers import PreTrainedModel, PreTrainedTokenizer

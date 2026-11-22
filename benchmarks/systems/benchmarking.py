@@ -8,16 +8,16 @@ import triton
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
-from cs336.lm.module import MultiheadSelfAttention, TransformerLM
-from cs336.lm.optimizer import AdamW
+from lmstack.lm.module import MultiheadSelfAttention, TransformerLM
+from lmstack.lm.optimizer import AdamW
 
-from cs336.lm.utils import scaled_dot_product_attention
+from lmstack.lm.utils import scaled_dot_product_attention
 
-from cs336.systems.flash_attention import TritonFlashAttention
-from cs336.systems.monitoring import monitor_transformer
+from lmstack.systems.flash_attention import TritonFlashAttention
+from lmstack.systems.monitoring import monitor_transformer
 import pandas as pd
 
-from cs336.systems.ddp import DDP
+from lmstack.systems.ddp import DDP
 from params import PARAM_MAP
 
 

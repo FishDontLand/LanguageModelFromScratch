@@ -2,7 +2,7 @@
 set -uo pipefail
 
 PARAM_FILE="$(dirname "${BASH_SOURCE[0]}")/params.txt"
-LOG_DIR="${CS336_LOG_DIR:-outputs/profile_logs}"
+LOG_DIR="${LMSTACK_LOG_DIR:-outputs/profile_logs}"
 MAX_PARALLEL=1
 
 mkdir -p "$LOG_DIR"
@@ -25,7 +25,7 @@ for length in "${CONTEXT_LENGTH[@]}"; do
   args=$(echo "{}" | cut -f2-)
 
   echo "Run ${line_no}: ${args} --context_length ${LENGTH}"
-  nsys profile --force-overwrite=true -o "$SUB_DIR/result_${LENGTH}_${line_no}" python -m cs336.systems.monitoring $FIXED_ARGS --context_length $LENGTH ${args}
+  nsys profile --force-overwrite=true -o "$SUB_DIR/result_${LENGTH}_${line_no}" python -m lmstack.systems.monitoring $FIXED_ARGS --context_length $LENGTH ${args}
 '
 done
 

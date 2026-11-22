@@ -19,7 +19,7 @@ def prepare_hendrycks_math_data(data_dir: str | Path = "data") -> None:
 
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
-    prompt = files("cs336.post_training").joinpath("prompts", "r1_zero.prompt").read_text(encoding="utf-8")
+    prompt = files("lmstack.post_training").joinpath("prompts", "r1_zero.prompt").read_text(encoding="utf-8")
     datasets = [load_dataset("EleutherAI/hendrycks_math", subject) for subject in SUBJECTS]
 
     for split in ("train", "test"):

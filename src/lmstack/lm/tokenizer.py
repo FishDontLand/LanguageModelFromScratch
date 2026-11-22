@@ -4,7 +4,7 @@ from typing import Iterable, Iterator
 
 import regex as re
 
-from cs336.lm.utils import PAT, create_linked_lst
+from lmstack.lm.utils import PAT, create_linked_lst
 
 
 class Tokenizer:

@@ -2,7 +2,7 @@ import torch
 import einx
 import math
 
-from cs336.lm.utils import scaled_dot_product_attention
+from lmstack.lm.utils import scaled_dot_product_attention
 
 
 class Linear(torch.nn.Module):

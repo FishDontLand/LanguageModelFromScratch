@@ -1,6 +1,6 @@
 import torch
 
-from cs336.post_training.sft import (
+from lmstack.post_training.sft import (
     compute_entropy,
     masked_normalize,
     sft_microbatch_train_step,

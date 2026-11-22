@@ -9,8 +9,8 @@ import numpy as np
 import torch
 import wandb
 
-from cs336.post_training.sft import init_vllm, tokenize_prompt_and_output, get_response_log_probs, log_generations
-from cs336.post_training.grading import r1_zero_reward_fn
+from lmstack.post_training.sft import init_vllm, tokenize_prompt_and_output, get_response_log_probs, log_generations
+from lmstack.post_training.grading import r1_zero_reward_fn
 
 
 def compute_group_normalized_rewards(

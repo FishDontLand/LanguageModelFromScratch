@@ -5,11 +5,11 @@ import yaml
 import torch
 import einx
 import os
-from cs336.lm.module import TransformerLM
-from cs336.lm.optimizer import AdamW
-from cs336.lm.tokenizer import Tokenizer
-from cs336.lm.utils import softmax, load_checkpoint
-from cs336.lm.training import setup_train_parser, get_model_hyper_params, get_optimizer_hyper_params
+from lmstack.lm.module import TransformerLM
+from lmstack.lm.optimizer import AdamW
+from lmstack.lm.tokenizer import Tokenizer
+from lmstack.lm.utils import softmax, load_checkpoint
+from lmstack.lm.training import setup_train_parser, get_model_hyper_params, get_optimizer_hyper_params
 
 def setup_inference_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()

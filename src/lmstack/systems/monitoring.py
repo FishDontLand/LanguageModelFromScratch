@@ -1,15 +1,15 @@
 import argparse
 import sys
 
-import cs336.lm.module as module
-import cs336.lm.optimizer as optimizer
+import lmstack.lm.module as module
+import lmstack.lm.optimizer as optimizer
 import torch
 import numpy as np
 import timeit
 import torch.cuda.nvtx as nvtx
 from contextlib import nullcontext
 
-from cs336.lm.utils import cross_entropy
+from lmstack.lm.utils import cross_entropy
 
 def monitor_transformer(vocab_size: int, d_model: int, d_ff: int, num_layers: int, num_heads: int,
                         theta: float, context_length: int, batch_size: int, warmup_steps:int,
